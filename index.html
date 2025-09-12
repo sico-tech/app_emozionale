@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>App Emozionale</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body {
@@ -116,16 +117,24 @@
     window.navigateTo = navigateTo;
     window.answerQuestion = answerQuestion;
     window.saveDailyPlan = saveDailyPlan;
+    window.playMusic = playMusic;
+
+    let firebaseAppModule, authModule, firestoreModule;
+
+    // Carica le dipendenze Firebase solo se disponibili
+    if (typeof __firebase_config !== 'undefined') {
+        isOffline = false;
+        firebaseAppModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+        authModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
+        firestoreModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+        firestoreModule.setLogLevel('debug');
+    }
 
     async function initApp() {
-        if (typeof __firebase_config !== 'undefined') {
-            isOffline = false;
-            // Carica le dipendenze Firebase solo se disponibili
-            const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
-            const { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-            const { getFirestore, doc, setDoc, collection, onSnapshot, query, getDocs } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-            const { setLogLevel } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-            setLogLevel('debug');
+        if (!isOffline) {
+            const { initializeApp } = firebaseAppModule;
+            const { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } = authModule;
+            const { getFirestore } = firestoreModule;
             
             const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
             const firebaseConfig = JSON.parse(__firebase_config);
@@ -161,9 +170,42 @@
 
     const appContainer = document.getElementById('app-container');
     const apiKey = "";
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+    const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+    const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
 
     let currentPlan = null;
+    let currentMusicPlayer = null;
+
+    // Melodie classiche per la riproduzione tramite Tone.js
+    const classicMusicMelodies = {
+        'Clair de Lune': [
+            { note: "C4", duration: "4n" }, { note: "D4", duration: "4n" }, { note: "Eb4", duration: "4n" }, { note: "C4", duration: "4n" },
+            { note: "Bb3", duration: "4n" }, { note: "C4", duration: "4n" }, { note: "Db4", duration: "4n" }, { note: "A3", duration: "4n" }
+        ],
+        'Gymnopédie No. 1': [
+            { note: "G4", duration: "8n" }, { note: "E4", duration: "8n" }, { note: "G4", duration: "8n" }, { note: "B4", duration: "8n" },
+            { note: "G4", duration: "8n" }, { note: "E4", duration: "8n" }, { note: "G4", duration: "8n" }, { note: "B4", duration: "8n" },
+            { note: "F#4", duration: "8n" }, { note: "D4", duration: "8n" }, { note: "F#4", duration: "8n" }, { note: "A4", duration: "8n" },
+            { note: "F#4", duration: "8n" }, { note: "D4", duration: "8n" }, { note: "F#4", duration: "8n" }, { note: "A4", duration: "8n" }
+        ],
+        'Le Carnaval des Animaux: Le Cygne': [
+            { note: "C4", duration: "4n" }, { note: "D4", duration: "8n" }, { note: "E4", duration: "8n" }, { note: "C4", duration: "4n" },
+            { note: "A3", duration: "4n" }, { note: "B3", duration: "8n" }, { note: "C4", duration: "8n" }, { note: "A3", duration: "4n" }
+        ],
+        'Nocturne in E-flat major, Op. 9, No. 2': [
+            { note: "Eb4", duration: "4n" }, { note: "C5", duration: "8n" }, { note: "Bb4", duration: "8n" }, { note: "G4", duration: "4n" },
+            { note: "Bb4", duration: "8n" }, { note: "Eb5", duration: "8n" }, { note: "Db5", duration: "4n" }, { note: "B4", duration: "4n" }
+        ],
+        'Cello Suite No. 1 in G major': [
+            { note: "G2", duration: "4n" }, { note: "D3", duration: "4n" }, { note: "G3", duration: "4n" }, { note: "B3", duration: "4n" },
+            { note: "C4", duration: "4n" }, { note: "D4", duration: "4n" }, { note: "B3", duration: "4n" }, { note: "G3", duration: "4n" }
+        ],
+        'Für Elise': [
+            { note: "E5", duration: "16n" }, { note: "D#5", duration: "16n" }, { note: "E5", duration: "16n" }, { note: "D#5", duration: "16n" },
+            { note: "E5", duration: "16n" }, { note: "B4", duration: "16n" }, { note: "D5", duration: "16n" }, { note: "C5", duration: "16n" },
+            { note: "A4", duration: "8n" }
+        ]
+    };
 
     const questions = [
         {
@@ -204,6 +246,9 @@
      */
     function navigateTo(viewName, data = {}) {
         appContainer.innerHTML = '';
+        if (currentMusicPlayer) {
+            currentMusicPlayer.stop();
+        }
         switch (viewName) {
             case 'start':
                 renderStartView();
@@ -274,8 +319,8 @@
         appContainer.innerHTML = `
             <div class="card bg-indigo-600 text-white flex flex-col items-center">
                 <div class="loading-spinner mb-4"></div>
-                <h2 class="text-2xl font-semibold">Stiamo preparando il tuo piano...</h2>
-                <p class="mt-2 text-indigo-200">Attendere prego, l'AI sta elaborando i tuoi dati.</p>
+                <h2 class="text-2xl font-semibold text-white">Stiamo preparando il tuo piano...</h2>
+                <p class="mt-2 text-indigo-200 text-center">Attendere prego, l'AI sta elaborando i tuoi dati e generando contenuti multimediali.</p>
             </div>
         `;
     }
@@ -285,9 +330,17 @@
             <div class="plan-item">
                 <h3 class="text-xl font-bold text-gray-800 mb-2">${time}</h3>
                 <p class="text-gray-600 mb-2">${plan.schedule[time].message}</p>
-                <p class="text-sm text-gray-500 mt-2">Immagine suggerita: ${plan.schedule[time].image_description}</p>
-                <p class="text-sm text-gray-500">Musica suggerita: "${plan.schedule[time].music_title}" - Genere: "${plan.schedule[time].music_genre}"</p>
-                <a href="${plan.schedule[time].music}" target="_blank" class="link-text text-sm">Cerca il brano su YouTube</a>
+                
+                <p class="text-sm text-gray-500 mt-4 mb-2">Immagine generata:</p>
+                ${plan.schedule[time].image_data ? `<img src="data:image/png;base64,${plan.schedule[time].image_data}" class="rounded-lg mt-2 mb-2 w-full max-h-64 object-cover" alt="${plan.schedule[time].image_description}">` : `<p class="text-red-500 text-sm">Errore nel caricamento dell'immagine: Immagine non generata.</p>`}
+                
+                <p class="text-sm text-gray-500 mt-4 mb-2">Brano suggerito:</p>
+                <p class="text-sm font-semibold text-gray-700">${plan.schedule[time].music_title}</p>
+                <p class="text-xs text-gray-500">di ${plan.schedule[time].music_genre}</p>
+                ${classicMusicMelodies[plan.schedule[time].music_title] ? 
+                    `<button onclick="playMusic('${plan.schedule[time].music_title}')" class="btn-secondary mt-2">Ascolta un estratto</button>` : 
+                    `<p class="text-sm text-gray-400 mt-2">Nessun estratto disponibile per questo brano.</p>`
+                }
             </div>
         `).join('');
 
@@ -302,6 +355,55 @@
                 </div>
             </div>
         `;
+    }
+
+    /**
+     * Riproduce una melodia classica usando Tone.js per circa 60 secondi.
+     * @param {string} title - Il titolo del brano da riprodurre.
+     */
+    function playMusic(title) {
+        if (currentMusicPlayer) {
+            currentMusicPlayer.stop();
+        }
+
+        const melody = classicMusicMelodies[title];
+        if (!melody) {
+            console.warn(`Melodia per "${title}" non trovata.`);
+            showMessage(`Melodia per "${title}" non trovata.`);
+            return;
+        }
+
+        const synth = new Tone.Synth().toDestination();
+        let melodyDuration = melody.reduce((total, noteInfo) => total + Tone.Time(noteInfo.duration).toSeconds(), 0);
+        
+        // Crea un loop che riproduce la melodia
+        const loop = new Tone.Loop(time => {
+            melody.forEach(noteInfo => {
+                synth.triggerAttackRelease(noteInfo.note, noteInfo.duration, time);
+                time += Tone.Time(noteInfo.duration).toSeconds();
+            });
+        }, melodyDuration);
+
+        // Avvia il loop e ferma dopo 60 secondi
+        loop.start(0);
+        Tone.Transport.start();
+        
+        currentMusicPlayer = {
+            stop: () => {
+                loop.stop();
+                loop.dispose();
+                synth.dispose();
+                Tone.Transport.stop();
+            }
+        };
+
+        // Ferma il loop dopo 60 secondi
+        setTimeout(() => {
+            currentMusicPlayer.stop();
+            showMessage(`Riproduzione di "${title}" terminata.`);
+        }, 60000);
+
+        showMessage(`Riproduzione di un estratto di "${title}" per 60 secondi`);
     }
 
     async function renderHistoryView() {
@@ -320,7 +422,10 @@
             return;
         }
 
+        // Accedi alle funzioni del database direttamente qui
+        const { collection, getDocs } = firestoreModule;
         const historyList = document.getElementById('history-list');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const userHistoryCollection = collection(db, `artifacts/${appId}/users/${currentUserId}/daily_plans`);
         
         try {
@@ -378,10 +483,27 @@
 
         if (!currentPlan) return;
         
+        const planToSave = {
+            profile: currentPlan.profile,
+            schedule: {}
+        };
+
+        Object.keys(currentPlan.schedule).forEach(timeKey => {
+            const timeSlot = currentPlan.schedule[timeKey];
+            planToSave.schedule[timeKey] = {
+                message: timeSlot.message,
+                image_description: timeSlot.image_description,
+                music_title: timeSlot.music_title,
+                music_genre: timeSlot.music_genre
+            };
+        });
+
+        const { doc, setDoc } = firestoreModule;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const docId = new Date().toISOString();
         const planDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/daily_plans`, docId);
         try {
-            await setDoc(planDocRef, currentPlan);
+            await setDoc(planDocRef, planToSave);
             console.log("Piano salvato con successo!");
             scheduleNotifications(currentPlan);
             navigateTo('start');
@@ -462,26 +584,30 @@
                     "Mattino (8:00)": {
                         message: "Inizia la giornata con un respiro profondo e la consapevolezza del momento presente. Trova il tuo centro prima di affrontare la frenesia quotidiana.",
                         image_description: "Un lago calmo all'alba, circondato da montagne. I colori tenui del cielo si riflettono sull'acqua immobile.",
-                        music_title: "Quietude",
-                        music_genre: "Ambient"
+                        music_title: "Clair de Lune",
+                        music_genre: "Claude Debussy",
+                        image_data: null
                     },
                     "Metà giornata (11:00)": {
                         message: "Fai una pausa di 5 minuti, concentrati sul tuo respiro e lascia andare le tensioni. Riconnettiti con la tua forza interiore.",
                         image_description: "Una singola candela accesa in una stanza buia, con un'atmosfera serena e pacifica.",
-                        music_title: "Morning Light",
-                        music_genre: "Soft Piano"
+                        music_title: "Gymnopédie No. 1",
+                        music_genre: "Erik Satie",
+                        image_data: null
                     },
                     "Pomeriggio (14:00)": {
                         message: "Rilassati e stacca dalla routine. Fai una breve passeggiata o ascolta della musica per resettare la mente.",
                         image_description: "Un sentiero forestale illuminato dal sole, con un'atmosfera di calma e pace.",
-                        music_title: "Forest Walk",
-                        music_genre: "Nature Sounds"
+                        music_title: "Le Carnaval des Animaux: Le Cygne",
+                        music_genre: "Camille Saint-Saëns",
+                        image_data: null
                     },
                     "Sera (18:00)": {
                         message: "Rifletti sulle emozioni della giornata. Scrivi un pensiero positivo o ringrazia per le piccole cose. Concediti un momento di tranquillità.",
                         image_description: "Una persona che guarda un tramonto, con colori caldi e un'atmosfera di pace.",
-                        music_title: "Evening Reflection",
-                        music_genre: "Classical Acoustic"
+                        music_title: "Nocturne in E-flat major, Op. 9, No. 2",
+                        music_genre: "Frédéric Chopin",
+                        image_data: null
                     }
                 }
             };
@@ -493,11 +619,9 @@
             return;
         }
 
-        // Codice originale per la generazione online
-        const prompt = createGeminiPrompt(userAnswers);
-        console.log("Prompt per l'AI:", prompt);
-
-        const payload = {
+        // 1. Genera il piano testuale
+        const prompt = await createGeminiPrompt(userAnswers);
+        const textPayload = {
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
                 responseMimeType: "application/json",
@@ -551,46 +675,75 @@
             }
         };
 
-        let response;
+        let textResponse;
         for (let i = 0; i < 3; i++) {
             try {
-                response = await fetch(apiUrl, {
+                textResponse = await fetch(textApiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(textPayload)
                 });
-                if (response.status !== 429) break;
+                if (textResponse.status !== 429) break;
                 await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
             } catch (error) {
-                console.error('Errore durante la chiamata API:', error);
+                console.error('Errore durante la chiamata API (testo):', error);
                 navigateTo('error', { message: 'Errore di connessione. Controlla la tua rete.' });
                 return;
             }
         }
-        if (!response.ok) {
-            console.error('API response failed:', response.status);
+        if (!textResponse.ok) {
+            console.error('API response failed:', textResponse.status);
             navigateTo('error', { message: 'Impossibile generare il piano. Riprova più tardi.' });
             return;
         }
 
-        const result = await response.json();
-        const generatedText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const textResult = await textResponse.json();
+        const generatedText = textResult?.candidates?.[0]?.content?.parts?.[0]?.text;
+        let plan;
 
         if (generatedText) {
             try {
-                // Rimuove il blocco di codice Markdown prima del parsing
                 const cleanedText = generatedText.replace(/```json\n|```/g, '').trim();
-                const plan = JSON.parse(cleanedText);
-                navigateTo('dailyPlan', plan);
+                plan = JSON.parse(cleanedText);
             } catch (e) {
                 console.error('Errore nel parsing JSON:', e);
                 navigateTo('error', { message: 'Risposta non valida dall\'AI. Riprova.' });
+                return;
             }
         } else {
             navigateTo('error', { message: 'Nessun piano generato. Riprova.' });
+            return;
         }
-    }
+        
+        // 2. Genera immagini per ogni sezione
+        const scheduleKeys = Object.keys(plan.schedule);
+        for (const key of scheduleKeys) {
+            const timeSlot = plan.schedule[key];
 
+            // Generazione Immagine
+            const imagePayload = { instances: { prompt: timeSlot.image_description }, parameters: { "sampleCount": 1} };
+            let imageResponse;
+            for (let i = 0; i < 3; i++) {
+                try {
+                    imageResponse = await fetch(imageApiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(imagePayload)
+                    });
+                    if (imageResponse.status !== 429) break;
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+                } catch (error) {
+                    console.error('Errore durante la chiamata API (immagine):', error);
+                    continue;
+                }
+            }
+            const imageResult = imageResponse?.ok ? await imageResponse.json() : null;
+            plan.schedule[key].image_data = imageResult?.predictions?.[0]?.bytesBase64Encoded || null;
+        }
+
+        navigateTo('dailyPlan', plan);
+    }
+    
     /**
      * Crea un prompt per l'AI basato sulle risposte dell'utente e sui dati storici.
      */
@@ -618,15 +771,16 @@
 
         const query = `Analizza le seguenti caratteristiche di una persona e crea un piano di benessere quotidiano.
 Le risposte indicano un carattere ${mood}, un meccanismo di coping ${copingMechanism} e un'ispirazione ${inspiration}.
-Il piano deve essere composto da un profilo dell'utente e da un programma con 4 messaggi, ciascuno con una descrizione dettagliata per un'immagine e un suggerimento musicale senza copyright.
+Il piano deve essere composto da un profilo dell'utente e da un programma con 4 messaggi, ciascuno con una descrizione dettagliata per un'immagine e un suggerimento di un brano di musica classica.
 Il profilo deve essere una singola parola come "Il Sognatore", "L'Avventuriero", "L'Anima Solitaria" ecc.
 Il programma deve includere 4 momenti:
-1.  **Mattino (8:00):** Un messaggio per iniziare la giornata, una descrizione di un'immagine ispiratrice e un brano musicale energico o edificante.
-2.  **Metà giornata (11:00):** Un messaggio per superare la metà della mattinata, una descrizione di un'immagine di focus, e un brano che favorisca la concentrazione.
-3.  **Pomeriggio (14:00):** Un messaggio per la ripartenza dopo pranzo, una descrizione di un'immagine di leggerezza, e un brano calmo o rilassante.
-4.  **Sera (18:00):** Un messaggio per riflettere e concludere la giornata, una descrizione di un'immagine di tranquillità, e un brano per il relax o la riflessione.
-Per ogni messaggio, includi un testo, una descrizione per l'immagine, il titolo del brano e il genere musicale. Usa brani e generi liberi da copyright.
+1.  **Mattino (8:00):** Un messaggio per iniziare la giornata, una descrizione di un'immagine ispiratrice e il titolo e compositore di un brano di musica classica energico o edificante.
+2.  **Metà giornata (11:00):** Un messaggio per superare la metà della mattinata, una descrizione di un'immagine di focus, e il titolo e compositore di un brano di musica classica che favorisca la concentrazione.
+3.  **Pomeriggio (14:00):** Un messaggio per la ripartenza dopo pranzo, una descrizione di un'immagine di leggerezza, e il titolo e compositore di un brano di musica classica calmo o rilassante.
+4.  **Sera (18:00):** Un messaggio per riflettere e concludere la giornata, una descrizione di un'immagine di tranquillità, e il titolo e compositore di un brano di musica classica per il relax o la riflessione.
+Per ogni messaggio, includi un testo, una descrizione per l'immagine, il titolo del brano e il nome del compositore.
 Il risultato finale deve essere un oggetto JSON con due chiavi: 'profile' e 'schedule'. 'schedule' deve contenere le 4 fasce orarie.
+Assicurati che i titoli dei brani siano tra i seguenti: "Clair de Lune", "Gymnopédie No. 1", "Le Carnaval des Animaux: Le Cygne", "Nocturne in E-flat major, Op. 9, No. 2", "Cello Suite No. 1 in G major", "Für Elise".
 `;
         return query;
     }
