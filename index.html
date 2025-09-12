@@ -78,6 +78,23 @@
             color: #6366f1;
             text-decoration: underline;
         }
+        .message-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            z-index: 1000;
+            transition: opacity 0.5s ease-in-out;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .message-box.show {
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -86,65 +103,67 @@
     <!-- Le sezioni verranno renderizzate dinamicamente qui -->
 </div>
 
+<!-- Casella per i messaggi -->
+<div id="message-box" class="message-box"></div>
+
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, collection, onSnapshot, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-    import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    setLogLevel('debug');
-
-    const appContainer = document.getElementById('app-container');
-    const apiKey = "";
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-
-    let appId;
-    let firebaseConfig;
-    let initialAuthToken;
-    let firebaseApp;
-    let auth;
-    let db;
-    let currentUserId = null;
-    let currentPlan = null;
-    let isAuthReady = false;
+    // Gestione delle dipendenze per l'esecuzione locale
+    let firebaseApp, auth, db;
+    let currentUserId = "offline-user"; // ID utente fittizio per la modalità offline
+    let isOffline = true;
 
     // Rende le funzioni globali in modo che gli attributi 'onclick' nell'HTML possano accedervi.
     window.navigateTo = navigateTo;
     window.answerQuestion = answerQuestion;
     window.saveDailyPlan = saveDailyPlan;
 
-    async function initFirebase() {
-        appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        firebaseApp = initializeApp(firebaseConfig);
-        auth = getAuth(firebaseApp);
-        db = getFirestore(firebaseApp);
-        
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                currentUserId = user.uid;
-                console.log("Utente autenticato:", currentUserId);
-            } else {
-                console.log("Utente non autenticato. Accesso anonimo.");
-                if (initialAuthToken) {
-                    try {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                    } catch (error) {
-                        console.error("Errore di autenticazione con token personalizzato:", error);
+    async function initApp() {
+        if (typeof __firebase_config !== 'undefined') {
+            isOffline = false;
+            // Carica le dipendenze Firebase solo se disponibili
+            const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+            const { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
+            const { getFirestore, doc, setDoc, collection, onSnapshot, query, getDocs } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+            const { setLogLevel } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+            setLogLevel('debug');
+            
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const firebaseConfig = JSON.parse(__firebase_config);
+            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+            
+            firebaseApp = initializeApp(firebaseConfig);
+            auth = getAuth(firebaseApp);
+            db = getFirestore(firebaseApp);
+            
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    currentUserId = user.uid;
+                    console.log("Utente autenticato:", currentUserId);
+                } else {
+                    console.log("Utente non autenticato. Accesso anonimo.");
+                    if (initialAuthToken) {
+                        try {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } catch (error) {
+                            console.error("Errore di autenticazione con token personalizzato:", error);
+                            await signInAnonymously(auth);
+                        }
+                    } else {
                         await signInAnonymously(auth);
                     }
-                } else {
-                    await signInAnonymously(auth);
                 }
-            }
-            if (!isAuthReady) {
-                isAuthReady = true;
                 navigateTo('start');
-            }
-        });
+            });
+        } else {
+            navigateTo('start');
+        }
     }
+
+    const appContainer = document.getElementById('app-container');
+    const apiKey = "";
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+    let currentPlan = null;
 
     const questions = [
         {
@@ -218,9 +237,9 @@
                 <p class="text-lg text-gray-600 mb-6">Inizia il nostro questionario per ricevere un messaggio emozionale personalizzato.</p>
                 <div class="flex flex-col sm:flex-row justify-center gap-4">
                     <button onclick="navigateTo('questionnaire')" class="btn-primary">Inizia Questionario</button>
-                    <button onclick="navigateTo('history')" class="btn-secondary">Vedi Storico</button>
+                    ${isOffline ? `<button class="btn-secondary" disabled>Vedi Storico</button>` : `<button onclick="navigateTo('history')" class="btn-secondary">Vedi Storico</button>`}
                 </div>
-                <p class="text-sm text-gray-400 mt-6">Il tuo ID utente per la sincronizzazione: ${currentUserId}</p>
+                ${isOffline ? `<p class="text-sm text-gray-400 mt-6">Modalità offline. Le funzionalità di salvataggio e storico sono disabilitate.</p>` : `<p class="text-sm text-gray-400 mt-6">Il tuo ID utente per la sincronizzazione: ${currentUserId}</p>`}
             </div>
         `;
     }
@@ -278,7 +297,7 @@
                 <p class="text-lg text-gray-600 mb-6">Ecco il tuo piano di benessere per la giornata.</p>
                 ${planItemsHtml}
                 <div class="flex flex-col sm:flex-row justify-center gap-4 mt-6">
-                    <button onclick="saveDailyPlan()" class="btn-primary">Salva il Piano e Abilita Notifiche</button>
+                    ${isOffline ? `<button class="btn-primary" disabled>Salva il Piano (solo online)</button>` : `<button onclick="saveDailyPlan()" class="btn-primary">Salva il Piano e Abilita Notifiche</button>`}
                     <button onclick="navigateTo('start')" class="btn-secondary">Inizia un nuovo piano</button>
                 </div>
             </div>
@@ -295,8 +314,13 @@
                 <button onclick="navigateTo('start')" class="btn-secondary mt-6">Torna alla Home</button>
             </div>
         `;
-        const historyList = document.getElementById('history-list');
 
+        if (isOffline) {
+            document.getElementById('history-list').innerHTML = '<p class="text-gray-500">Lo storico non è disponibile in modalità offline.</p>';
+            return;
+        }
+
+        const historyList = document.getElementById('history-list');
         const userHistoryCollection = collection(db, `artifacts/${appId}/users/${currentUserId}/daily_plans`);
         
         try {
@@ -347,6 +371,11 @@
      * Salva il piano giornaliero nel database Firestore e abilita le notifiche.
      */
     async function saveDailyPlan() {
+        if (isOffline) {
+            showMessage("Questa funzione è disponibile solo in modalità online.");
+            return;
+        }
+
         if (!currentPlan) return;
         
         const docId = new Date().toISOString();
@@ -366,8 +395,8 @@
      * Richiede il permesso per le notifiche e le programma.
      */
     function scheduleNotifications(plan) {
-        if (!('Notification' in window)) {
-            console.warn("Questo browser non supporta le notifiche desktop.");
+        if (isOffline || !('Notification' in window)) {
+            console.warn("Le notifiche non sono supportate in questo ambiente.");
             return;
         }
 
@@ -409,9 +438,62 @@
     }
 
     /**
+     * Mostra un messaggio a comparsa per un breve periodo di tempo.
+     * @param {string} message - Il messaggio da visualizzare.
+     */
+    function showMessage(message) {
+        const messageBox = document.getElementById('message-box');
+        messageBox.textContent = message;
+        messageBox.classList.add('show');
+        setTimeout(() => {
+            messageBox.classList.remove('show');
+        }, 3000);
+    }
+
+    /**
      * Genera un piano giornaliero personalizzato usando il modello Gemini.
      */
     async function generateDailyPlan() {
+        if (isOffline) {
+            // Genera un piano fittizio per la modalità offline
+            const mockPlan = {
+                profile: "L'Anima Calma",
+                schedule: {
+                    "Mattino (8:00)": {
+                        message: "Inizia la giornata con un respiro profondo e la consapevolezza del momento presente. Trova il tuo centro prima di affrontare la frenesia quotidiana.",
+                        image_description: "Un lago calmo all'alba, circondato da montagne. I colori tenui del cielo si riflettono sull'acqua immobile.",
+                        music_title: "Quietude",
+                        music_genre: "Ambient"
+                    },
+                    "Metà giornata (11:00)": {
+                        message: "Fai una pausa di 5 minuti, concentrati sul tuo respiro e lascia andare le tensioni. Riconnettiti con la tua forza interiore.",
+                        image_description: "Una singola candela accesa in una stanza buia, con un'atmosfera serena e pacifica.",
+                        music_title: "Morning Light",
+                        music_genre: "Soft Piano"
+                    },
+                    "Pomeriggio (14:00)": {
+                        message: "Rilassati e stacca dalla routine. Fai una breve passeggiata o ascolta della musica per resettare la mente.",
+                        image_description: "Un sentiero forestale illuminato dal sole, con un'atmosfera di calma e pace.",
+                        music_title: "Forest Walk",
+                        music_genre: "Nature Sounds"
+                    },
+                    "Sera (18:00)": {
+                        message: "Rifletti sulle emozioni della giornata. Scrivi un pensiero positivo o ringrazia per le piccole cose. Concediti un momento di tranquillità.",
+                        image_description: "Una persona che guarda un tramonto, con colori caldi e un'atmosfera di pace.",
+                        music_title: "Evening Reflection",
+                        music_genre: "Classical Acoustic"
+                    }
+                }
+            };
+            
+            // Simula un tempo di caricamento per una migliore esperienza utente
+            setTimeout(() => {
+                navigateTo('dailyPlan', mockPlan);
+            }, 1500);
+            return;
+        }
+
+        // Codice originale per la generazione online
         const prompt = createGeminiPrompt(userAnswers);
         console.log("Prompt per l'AI:", prompt);
 
@@ -550,9 +632,7 @@ Il risultato finale deve essere un oggetto JSON con due chiavi: 'profile' e 'sch
     }
 
     // Inizializza l'app dopo che tutto lo script è stato caricato.
-    document.addEventListener('DOMContentLoaded', () => {
-        initFirebase();
-    });
+    initApp();
 </script>
 
 </body>
