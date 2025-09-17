@@ -192,37 +192,87 @@
 
     let currentPlan = null;
     let currentMusicPlayer = null;
+    let currentTonePart = null;
 
-    // Melodie classiche per la riproduzione tramite Tone.js
-    const classicMusicMelodies = {
-        'Clair de Lune': [
-            { note: "C4", duration: "4n" }, { note: "D4", duration: "4n" }, { note: "Eb4", duration: "4n" }, { note: "C4", duration: "4n" },
-            { note: "Bb3", duration: "4n" }, { note: "C4", duration: "4n" }, { note: "Db4", duration: "4n" }, { note: "A3", duration: "4n" }
-        ],
-        'Gymnopédie No. 1': [
-            { note: "G4", duration: "8n" }, { note: "E4", duration: "8n" }, { note: "G4", duration: "8n" }, { note: "B4", duration: "8n" },
-            { note: "G4", duration: "8n" }, { note: "E4", duration: "8n" }, { note: "G4", duration: "8n" }, { note: "B4", duration: "8n" },
-            { note: "F#4", duration: "8n" }, { note: "D4", duration: "8n" }, { note: "F#4", duration: "8n" }, { note: "A4", duration: "8n" },
-            { note: "F#4", duration: "8n" }, { note: "D4", duration: "8n" }, { note: "F#4", duration: "8n" }, { note: "A4", duration: "8n" }
-        ],
-        'Le Carnaval des Animaux: Le Cygne': [
-            { note: "C4", duration: "4n" }, { note: "D4", duration: "8n" }, { note: "E4", duration: "8n" }, { note: "C4", duration: "4n" },
-            { note: "A3", duration: "4n" }, { note: "B3", duration: "8n" }, { note: "C4", duration: "8n" }, { note: "A3", duration: "4n" }
-        ],
-        'Nocturne in E-flat major, Op. 9, No. 2': [
-            { note: "Eb4", duration: "4n" }, { note: "C5", duration: "8n" }, { note: "Bb4", duration: "8n" }, { note: "G4", duration: "4n" },
-            { note: "Bb4", duration: "8n" }, { note: "Eb5", duration: "8n" }, { note: "Db5", duration: "4n" }, { note: "B4", duration: "4n" }
-        ],
-        'Cello Suite No. 1 in G major': [
-            { note: "G2", duration: "4n" }, { note: "D3", duration: "4n" }, { note: "G3", duration: "4n" }, { note: "B3", duration: "4n" },
-            { note: "C4", duration: "4n" }, { note: "D4", duration: "4n" }, { note: "B3", duration: "4n" }, { note: "G3", duration: "4n" }
-        ],
-        'Für Elise': [
-            { note: "E5", duration: "16n" }, { note: "D#5", duration: "16n" }, { note: "E5", duration: "16n" }, { note: "D#5", duration: "16n" },
-            { note: "E5", duration: "16n" }, { note: "B4", duration: "16n" }, { note: "D5", duration: "16n" }, { note: "C5", duration: "16n" },
-            { note: "A4", duration: "8n" }
-        ]
+    // Dati musicali più complessi che non sono solo accordi singoli
+    const musicStyles = {
+        'Clair de Lune': {
+            synth: new Tone.PolySynth(Tone.FMSynth, {
+                envelope: {
+                    attack: 0.5,
+                    decay: 1.5,
+                    sustain: 0.5,
+                    release: 3
+                },
+                harmonicity: 3.01,
+                modulationIndex: 14,
+                detune: 0,
+                oscillator: { type: "sine" },
+                modulation: { type: "sawtooth" },
+                volume: -15
+            }).toDestination(),
+            part: [
+                ["0", ["C4", "Eb4", "G4"]],
+                ["2n", ["D4", "F4", "A4"]],
+                ["1n", ["C4", "Eb4", "G4"]],
+                ["2n", ["G3", "Bb3", "D4"]]
+            ]
+        },
+        'Gymnopédie No. 1': {
+            synth: new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "triangle" },
+                envelope: { attack: 0.1, decay: 0.5, sustain: 0.5, release: 1 },
+                volume: -12
+            }).toDestination(),
+            part: [
+                ["0", ["G4", "D5", "G5"]],
+                ["1n", ["F4", "C5", "F5"]],
+                ["2n", ["E4", "B4", "E5"]],
+                ["4n", ["D4", "A4", "D5"]]
+            ]
+        },
+        'Le Carnaval des Animaux: Le Cygne': {
+            synth: new Tone.PolySynth(Tone.FMSynth, {
+                envelope: {
+                    attack: 0.5,
+                    decay: 0.5,
+                    sustain: 1,
+                    release: 2
+                },
+                harmonicity: 3.01,
+                modulationIndex: 14,
+                detune: 0,
+                oscillator: { type: "sine" },
+                modulation: { type: "sawtooth" },
+                volume: -15
+            }).toDestination(),
+            part: [
+                ["0", ["A3", "C4", "E4"]],
+                ["2n", ["A3", "C4", "E4"]],
+                ["1n", ["G3", "B3", "D4"]],
+                ["2n", ["F3", "A3", "C4"]]
+            ]
+        },
+        'Nocturne in E-flat major, Op. 9, No. 2': {
+            synth: new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "triangle" },
+                envelope: { attack: 0.5, decay: 0.5, sustain: 0.5, release: 1 },
+                volume: -12
+            }).toDestination(),
+            part: [
+                ["0", ["Eb4", "G4", "Bb4"]],
+                ["2n", ["F4", "Ab4", "C5"]],
+                ["1n", ["Eb4", "G4", "Bb4"]],
+                ["2n", ["C4", "Eb4", "G4"]]
+            ]
+        }
     };
+    
+    // Aggiungi un effetto di riverbero
+    const reverb = new Tone.Reverb(2).toDestination();
+    for (const style in musicStyles) {
+        musicStyles[style].synth.connect(reverb);
+    }
 
     const questions = [
         {
@@ -263,9 +313,12 @@
      */
     function navigateTo(viewName, data = {}) {
         appContainer.innerHTML = '';
+        // Controlla se c'è una parte musicale in esecuzione e la ferma
         if (currentMusicPlayer) {
             currentMusicPlayer.stop();
+            currentMusicPlayer = null;
         }
+
         switch (viewName) {
             case 'start':
                 renderStartView();
@@ -343,23 +396,29 @@
     }
 
     function renderDailyPlanView(plan) {
-        const planItemsHtml = Object.keys(plan.schedule).map(time => `
-            <div class="plan-item">
-                <h3 class="text-xl font-bold text-gray-800 mb-2">${time}</h3>
-                <p class="text-gray-600 mb-2">${plan.schedule[time].message}</p>
-                
-                <p class="text-sm text-gray-500 mt-4 mb-2">Immagine generata:</p>
-                ${plan.schedule[time].image_data ? `<img src="data:image/png;base64,${plan.schedule[time].image_data}" class="rounded-lg mt-2 mb-2 w-full max-h-64 object-cover" alt="${plan.schedule[time].image_description}">` : `<p class="text-red-500 text-sm">Errore nel caricamento dell'immagine: Immagine non generata.</p>`}
-                
-                <p class="text-sm text-gray-500 mt-4 mb-2">Brano suggerito:</p>
-                <p class="text-sm font-semibold text-gray-700">${plan.schedule[time].music_title}</p>
-                <p class="text-xs text-gray-500">di ${plan.schedule[time].music_genre}</p>
-                ${classicMusicMelodies[plan.schedule[time].music_title] ? 
-                    `<button onclick="playMusic('${plan.schedule[time].music_title}')" class="btn-secondary mt-2">Ascolta un estratto</button>` : 
-                    `<p class="text-sm text-gray-400 mt-2">Nessun estratto disponibile per questo brano.</p>`
-                }
-            </div>
-        `).join('');
+        const planItemsHtml = Object.keys(plan.schedule).map(time => {
+            const timeSlot = plan.schedule[time];
+            const imageUrl = timeSlot.image_data ? `data:image/png;base64,${timeSlot.image_data}` : 'https://placehold.co/400x250/e2e8f0/4b5563?text=Errore+Immagine';
+            const imageAlt = timeSlot.image_data ? timeSlot.image_description : 'Immagine non disponibile';
+            
+            return `
+                <div class="plan-item">
+                    <h3 class="text-xl font-bold text-gray-800 mb-2">${time}</h3>
+                    <p class="text-gray-600 mb-2">${timeSlot.message}</p>
+                    
+                    <p class="text-sm text-gray-500 mt-4 mb-2">Immagine generata:</p>
+                    <img src="${imageUrl}" class="rounded-lg mt-2 mb-2 w-full max-h-64 object-cover" alt="${imageAlt}">
+                    
+                    <p class="text-sm text-gray-500 mt-4 mb-2">Brano suggerito:</p>
+                    <p class="text-sm font-semibold text-gray-700">${timeSlot.music_title}</p>
+                    <p class="text-xs text-gray-500">Compositore: ${timeSlot.music_composer}</p>
+                    ${musicStyles[timeSlot.music_title] ? 
+                        `<button onclick="playMusic('${timeSlot.music_title}')" class="btn-secondary mt-2">Ascolta un estratto</button>` : 
+                        `<p class="text-sm text-gray-400 mt-2">Nessun estratto disponibile per questo brano.</p>`
+                    }
+                </div>
+            `;
+        }).join('');
 
         appContainer.innerHTML = `
             <div class="card text-left">
@@ -375,52 +434,69 @@
     }
 
     /**
-     * Riproduce una melodia classica usando Tone.js per circa 60 secondi.
-     * @param {string} title - Il titolo del brano da riprodurre.
+     * Riproduce una melodia generata proceduralmente per una durata di almeno 15 secondi.
+     * @param {string} styleName - Lo stile musicale da riprodurre.
      */
-    function playMusic(title) {
-        if (currentMusicPlayer) {
-            currentMusicPlayer.stop();
+    async function playMusic(styleName) {
+        // Avvia il contesto audio solo se non è già attivo.
+        if (Tone.context.state !== 'running') {
+            await Tone.start();
         }
 
-        const melody = classicMusicMelodies[title];
-        if (!melody) {
-            console.warn(`Melodia per "${title}" non trovata.`);
-            showMessage(`Melodia per "${title}" non trovata.`);
+        // Se la musica è già in riproduzione e il brano è lo stesso, interrompi.
+        if (currentMusicPlayer && currentMusicPlayer.styleName === styleName) {
+            currentMusicPlayer.stop();
+            currentMusicPlayer = null;
+            showMessage(`Riproduzione di "${styleName}" interrotta.`);
             return;
         }
 
-        const synth = new Tone.Synth().toDestination();
-        let melodyDuration = melody.reduce((total, noteInfo) => total + Tone.Time(noteInfo.duration).toSeconds(), 0);
-        
-        // Crea un loop che riproduce la melodia
-        const loop = new Tone.Loop(time => {
-            melody.forEach(noteInfo => {
-                synth.triggerAttackRelease(noteInfo.note, noteInfo.duration, time);
-                time += Tone.Time(noteInfo.duration).toSeconds();
-            });
-        }, melodyDuration);
-
-        // Avvia il loop e ferma dopo 60 secondi
-        loop.start(0);
-        Tone.Transport.start();
-        
-        currentMusicPlayer = {
-            stop: () => {
-                loop.stop();
-                loop.dispose();
-                synth.dispose();
-                Tone.Transport.stop();
-            }
-        };
-
-        // Ferma il loop dopo 60 secondi
-        setTimeout(() => {
+        // Interrompi qualsiasi brano precedente prima di avviarne uno nuovo.
+        if (currentMusicPlayer) {
             currentMusicPlayer.stop();
-            showMessage(`Riproduzione di "${title}" terminata.`);
-        }, 60000);
+        }
+        
+        try {
+            const style = musicStyles[styleName];
+            if (!style) {
+                const errorMessage = `Stile musicale "${styleName}" non trovato.`;
+                console.warn(errorMessage);
+                showMessage(errorMessage);
+                return;
+            }
 
-        showMessage(`Riproduzione di un estratto di "${title}" per 60 secondi`);
+            const synth = style.synth;
+            const partData = style.part;
+
+            // Crea una nuova parte con la sequenza di accordi
+            currentTonePart = new Tone.Part((time, chord) => {
+                synth.triggerAttackRelease(chord, "8n", time);
+            }, partData).start(0);
+
+            // Imposta un loop per 8 volte per una durata di circa 20-30 secondi
+            currentTonePart.loop = true;
+            currentTonePart.loopEnd = partData[partData.length - 1][0] + "n";
+            currentTonePart.playbackRate = 1;
+            
+            // Imposta il trasporto e avvia la riproduzione
+            Tone.Transport.start();
+            
+            currentMusicPlayer = {
+                styleName: styleName,
+                stop: () => {
+                    currentTonePart.stop();
+                    currentTonePart.dispose();
+                    Tone.Transport.stop();
+                    Tone.Transport.cancel();
+                    currentTonePart = null;
+                }
+            };
+            
+            showMessage(`Riproduzione di un estratto di "${styleName}"`);
+        } catch (error) {
+            console.error("Errore durante la riproduzione:", error);
+            showMessage("Errore durante la riproduzione. Riprova più tardi.");
+        }
     }
 
     async function renderHistoryView() {
@@ -511,7 +587,7 @@
                 message: timeSlot.message,
                 image_description: timeSlot.image_description,
                 music_title: timeSlot.music_title,
-                music_genre: timeSlot.music_genre
+                music_composer: timeSlot.music_composer
             };
         });
 
@@ -601,29 +677,29 @@
                     "Mattino (8:00)": {
                         message: "Inizia la giornata con un respiro profondo e la consapevolezza del momento presente. Trova il tuo centro prima di affrontare la frenesia quotidiana.",
                         image_description: "Un lago calmo all'alba, circondato da montagne. I colori tenui del cielo si riflettono sull'acqua immobile.",
-                        music_title: "Clair de Lune",
-                        music_genre: "Claude Debussy",
+                        music_title: "Gymnopédie No. 1",
+                        music_composer: "Erik Satie",
                         image_data: null
                     },
                     "Metà giornata (11:00)": {
                         message: "Fai una pausa di 5 minuti, concentrati sul tuo respiro e lascia andare le tensioni. Riconnettiti con la tua forza interiore.",
                         image_description: "Una singola candela accesa in una stanza buia, con un'atmosfera serena e pacifica.",
-                        music_title: "Gymnopédie No. 1",
-                        music_genre: "Erik Satie",
+                        music_title: "Nocturne in E-flat major, Op. 9, No. 2",
+                        music_composer: "Frédéric Chopin",
                         image_data: null
                     },
                     "Pomeriggio (14:00)": {
                         message: "Rilassati e stacca dalla routine. Fai una breve passeggiata o ascolta della musica per resettare la mente.",
                         image_description: "Un sentiero forestale illuminato dal sole, con un'atmosfera di calma e pace.",
-                        music_title: "Le Carnaval des Animaux: Le Cygne",
-                        music_genre: "Camille Saint-Saëns",
+                        music_title: "Clair de Lune",
+                        music_composer: "Claude Debussy",
                         image_data: null
                     },
                     "Sera (18:00)": {
                         message: "Rifletti sulle emozioni della giornata. Scrivi un pensiero positivo o ringrazia per le piccole cose. Concediti un momento di tranquillità.",
                         image_description: "Una persona che guarda un tramonto, con colori caldi e un'atmosfera di pace.",
-                        music_title: "Nocturne in E-flat major, Op. 9, No. 2",
-                        music_genre: "Frédéric Chopin",
+                        music_title: "Le Carnaval des Animaux: Le Cygne",
+                        music_composer: "Camille Saint-Saëns",
                         image_data: null
                     }
                 }
@@ -655,7 +731,7 @@
                                         "message": { "type": "STRING" },
                                         "image_description": { "type": "STRING" },
                                         "music_title": { "type": "STRING" },
-                                        "music_genre": { "type": "STRING" }
+                                        "music_composer": { "type": "STRING" }
                                     }
                                 },
                                 "Metà giornata (11:00)": {
@@ -664,7 +740,7 @@
                                         "message": { "type": "STRING" },
                                         "image_description": { "type": "STRING" },
                                         "music_title": { "type": "STRING" },
-                                        "music_genre": { "type": "STRING" }
+                                        "music_composer": { "type": "STRING" }
                                     }
                                 },
                                 "Pomeriggio (14:00)": {
@@ -673,7 +749,7 @@
                                         "message": { "type": "STRING" },
                                         "image_description": { "type": "STRING" },
                                         "music_title": { "type": "STRING" },
-                                        "music_genre": { "type": "STRING" }
+                                        "music_composer": { "type": "STRING" }
                                     }
                                 },
                                 "Sera (18:00)": {
@@ -682,7 +758,7 @@
                                         "message": { "type": "STRING" },
                                         "image_description": { "type": "STRING" },
                                         "music_title": { "type": "STRING" },
-                                        "music_genre": { "type": "STRING" }
+                                        "music_composer": { "type": "STRING" }
                                     }
                                 }
                             }
@@ -738,7 +814,7 @@
             const timeSlot = plan.schedule[key];
 
             // Generazione Immagine
-            const imagePayload = { instances: { prompt: timeSlot.image_description }, parameters: { "sampleCount": 1} };
+            const imagePayload = { instances: [{ prompt: timeSlot.image_description }], parameters: { "sampleCount": 1 } };
             let imageResponse;
             for (let i = 0; i < 3; i++) {
                 try {
@@ -797,7 +873,7 @@ Il programma deve includere 4 momenti:
 4.  **Sera (18:00):** Un messaggio per riflettere e concludere la giornata, una descrizione di un'immagine di tranquillità, e il titolo e compositore di un brano di musica classica per il relax o la riflessione.
 Per ogni messaggio, includi un testo, una descrizione per l'immagine, il titolo del brano e il nome del compositore.
 Il risultato finale deve essere un oggetto JSON con due chiavi: 'profile' e 'schedule'. 'schedule' deve contenere le 4 fasce orarie.
-Assicurati che i titoli dei brani siano tra i seguenti: "Clair de Lune", "Gymnopédie No. 1", "Le Carnaval des Animaux: Le Cygne", "Nocturne in E-flat major, Op. 9, No. 2", "Cello Suite No. 1 in G major", "Für Elise".
+Assicurati che i titoli dei brani siano tra i seguenti: "Clair de Lune", "Gymnopédie No. 1", "Le Carnaval des Animaux: Le Cygne", "Nocturne in E-flat major, Op. 9, No. 2".
 `;
         return query;
     }
